@@ -1,0 +1,5 @@
+node_modules/
+logs/
+flashlib/
+test-results/
+playwright-report/
