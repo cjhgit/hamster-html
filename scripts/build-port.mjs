@@ -12,6 +12,7 @@ for (const file of files) {
     .replace(/^   (static )?var /gm, '   $1')
     .replace(/\b(static )?function (\w+)\(/g, (_, stat='', method) => `${stat}${method === name ? 'constructor' : method}(`)
     .replace(/Object\.registerClass\(/g, 'registerClass(')
+    .replace(/\bsetInterval\(/g, 'flashSetInterval(')
     .replace(/\b(?:Food|WaterBottle|MovieClip)\(([^;\n]+)\)/g, 'identity($1)');
   // AVM1 silently ignores a method call on an undefined optional drawing clip.
   if(name === 'LegV2') s = s.replace(/mcBG\.(moveTo|lineTo)\(/g,'mcBG?.$1(');
@@ -21,7 +22,7 @@ for (const file of files) {
 let root = fs.readFileSync(base + 'frame_1/DoAction.as','utf8').replace(/\r/g,'');
 root = root.replace(/^function (\w+)\(/gm,'this.$1 = function(');
 // Root timeline variables belong to its MovieClip scope, not a JS stack frame.
-root = root.replace(/^var (\w+)([^\n]*)/gm,(_,name,rest) => `this.${name}${rest === ';' ? ' = undefined;' : rest}`);
+root = root.replace(/^var (\w+)([^\n]*)/gm,(_,name,rest) => rest === ';' ? `if (!Object.prototype.hasOwnProperty.call(this,"${name}")) this.${name} = undefined;` : `this.${name}${rest}`);
 root = root.replace(/MovieClip\(eatenFood.pop\(\)\)/g,'identity(eatenFood.pop())');
 root = root.replace('food.drag = false;', 'if (food) food.drag = false;');
 // AS2 hoists timeline functions before executing its first frame.

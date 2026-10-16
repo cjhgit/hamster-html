@@ -9,25 +9,53 @@ const int = x => Math.trunc(x);
 const com = {abowman:{math:{},graphics:{}}};
 const Stage = {width:280,height:210};
 const System = {security:{allowDomain(){}}};
-// Virtual timers advance with the original 30 fps timeline, including in tests.
+// Flash timers use elapsed time independently of frame rate. Tests can switch
+// to a virtual clock without replacing the browser's own timer functions.
 const flashTimers = new Map();
-let flashTime = 0, timerId = 0;
+let flashTime = 0, timerId = 0, manualClock = false;
+const timerNow = () => manualClock ? flashTime : performance.now();
+function armTimer(id,t) {
+  t.handle=window.setTimeout(()=>fireTimer(id),Math.max(0,t.at-timerNow()));
+}
+function fireTimer(id) {
+  const t=flashTimers.get(id);
+  if(!t) return;
+  if(t.repeat) { t.at=timerNow()+t.delay; if(!manualClock) armTimer(id,t); }
+  else flashTimers.delete(id);
+  t.target[t.method]();
+}
+function cancelFlashTimer(id) {
+  const t=flashTimers.get(id);
+  if(t) window.clearTimeout(t.handle);
+  flashTimers.delete(id);
+}
+function setManualClock(manual) {
+  if(manual===manualClock) return;
+  const before=timerNow();
+  manualClock=manual;
+  const after=timerNow();
+  for(const [id,t] of flashTimers) {
+    window.clearTimeout(t.handle);
+    t.at=after+Math.max(0,t.at-before);
+    if(!manualClock) armTimer(id,t);
+  }
+}
 function scheduleFlash(target, method, delay, repeat=false) {
   const id = ++timerId;
-  flashTimers.set(id,{target,method,at:flashTime + delay,delay,repeat});
+  const t={target,method,at:timerNow() + delay,delay,repeat};
+  flashTimers.set(id,t);
+  if(!manualClock) armTimer(id,t);
   return id;
 }
 const _global = {
   setTimeout: (o,m,d) => scheduleFlash(o,m,d),
-  clearTimeout: id => flashTimers.delete(id)
+  clearTimeout: cancelFlashTimer
 };
-function setInterval(o,m,d) { return scheduleFlash(o,m,d,true); }
+function flashSetInterval(o,m,d) { return scheduleFlash(o,m,d,true); }
 function advanceTimers() {
+  if(!manualClock) return;
   flashTime += 1000 / 30;
-  for(const [id,t] of [...flashTimers]) if(t.at <= flashTime) {
-    if(t.repeat) t.at += t.delay; else flashTimers.delete(id);
-    t.target[t.method]();
-  }
+  for(const [id,t] of [...flashTimers]) if(t.at <= flashTime) fireTimer(id);
 }
 function color(value=0,alpha=100) {
   value = Number(value) || 0;
@@ -80,8 +108,9 @@ class MovieClip {
   endFill() { this.fill=null; }
   point(x,y) {
     if(!Number.isFinite(x)||!Number.isFinite(y)) return false;
-    this.bounds.minX=Math.min(this.bounds.minX,x); this.bounds.minY=Math.min(this.bounds.minY,y);
-    this.bounds.maxX=Math.max(this.bounds.maxX,x); this.bounds.maxY=Math.max(this.bounds.maxY,y);
+    const pad=this.strokeStyle ? this.strokeStyle.width/2 : 0;
+    this.bounds.minX=Math.min(this.bounds.minX,x-pad); this.bounds.minY=Math.min(this.bounds.minY,y-pad);
+    this.bounds.maxX=Math.max(this.bounds.maxX,x+pad); this.bounds.maxY=Math.max(this.bounds.maxY,y+pad);
     return true;
   }
   moveTo(x,y) {

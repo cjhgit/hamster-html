@@ -81,4 +81,46 @@ try {
   await page.evaluate(()=>{hamsterApp.step(30);hamsterApp.render();});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),375);
   console.log('PASS: all original behavior states, 9 minutes of simulation, food recycling and mobile sizing');
+  const colors={bgColor:'123456',bodyColor:'FF0000',earColor:'0000FF',snoutColor:'00FFFF',eyeColor:'AA0000',feetColor:'BB0000',tailColor:'112233',waterColor:'00FF00',foodColor:'FF00FF',wheelColor:'234567',wheelOuterColor:'345678',wheelCenterColor:'456789',wheelSpokeColor:'56789A'};
+  const query=new URLSearchParams(Object.entries(colors).map(([key,value])=>['up_'+key,value]));
+  await page.setViewportSize({width:742,height:550});
+  await page.goto('http://127.0.0.1:5173/?'+query);
+  const actual=await page.evaluate(keys=>{
+    hamsterApp.paused=true;
+    return Object.fromEntries(keys.map(key=>[key,hamsterApp.root[key].toString(16).padStart(6,'0').toUpperCase()]));
+  },Object.keys(colors));
+  assert.deepEqual(actual,colors);
+  assert.equal(await page.evaluate(()=>hamsterApp.root.wheel._width),206);
+  assert.equal(await page.evaluate(()=>window.setInterval.toString().includes('[native code]')),true);
+  await page.mouse.move(260,200);await page.mouse.down();await page.mouse.move(260,15);
+  const boundary=await page.evaluate(()=>{
+    hamsterApp.step();hamsterApp.render();
+    return {foodY:hamsterApp.root.food._y,pixel:[...document.querySelector('canvas').getContext('2d').getImageData(260,15,1,1).data]};
+  });
+  assert.ok(boundary.foodY<0);
+  assert.deepEqual(boundary.pixel,[255,255,255,255]);
+  await page.mouse.up();
+  // Intercept the author's original destination, verifying navigation without
+  // sending a request to that website during this test.
+  await page.route('http://abowman.com/google-modules/hamster',route=>route.fulfill({body:'author link verified',contentType:'text/plain'}));
+  await page.locator('#brand-link').click();
+  await page.waitForURL('http://abowman.com/google-modules/hamster');
+  assert.ok((await page.textContent('body')).includes('author link verified'));
+  await page.goto('http://127.0.0.1:5173');
+  // Original interval and timeout callbacks must work without frame stepping.
+  const timing=await page.evaluate(async()=>{
+    const originalRAF=window.requestAnimationFrame;
+    window.requestAnimationFrame=()=>0;
+    const probe={count:0,done:false,tick(){this.count++;},finish(){this.done=true;}};
+    const interval=flashSetInterval(probe,'tick',20);
+    _global.setTimeout(probe,'finish',35);
+    await new Promise(resolve=>window.setTimeout(resolve,100));
+    _global.clearTimeout(interval);
+    window.requestAnimationFrame=originalRAF;
+    return {count:probe.count,done:probe.done};
+  });
+  assert.equal(timing.done,true);
+  assert.ok(timing.count>=2);
+  assert.deepEqual(errors,[]);
+  console.log('PASS: all 13 color parameters, stage clipping, wheel stroke bounds, author navigation, native browser timers and elapsed-time Flash timers');
 } finally { await browser.close(); }

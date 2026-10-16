@@ -26,6 +26,8 @@
     ctx.beginPath(); ctx.roundRect(9,9,698,523,12); ctx.fillStyle='#fff'; ctx.fill();
     ctx.setLineDash([5,4]); ctx.lineWidth=2; ctx.strokeStyle='#b7b7b7'; ctx.stroke(); ctx.setLineDash([]);
     ctx.save();
+    // The SWF stage clips content; retain the boundary stroke up to its edge.
+    ctx.beginPath(); ctx.rect(stage.x-1,stage.y-1,stage.w+2,stage.h+2); ctx.clip();
     ctx.translate(stage.x,stage.y); ctx.scale(stage.w/280,stage.h/210);
     root.renderClip(ctx);
     ctx.restore();
@@ -52,6 +54,14 @@
     root._ymouse=(root._ymouse-stage.y)*210/stage.h;
   }
   function inStage() { return root._xmouse>=0 && root._xmouse<=280 && root._ymouse>=0 && root._ymouse<=210; }
+  const brand=document.getElementById('brand-link');
+  // The original TextField uses a URL and target="_top".
+  brand.href=root.txt.format.url;
+  brand.target=root.txt.format.target;
+  brand.style.left=`${(stage.x+(root.txt._x+2)*stage.w/280)/742*100}%`;
+  brand.style.top=`${(stage.y+(root.txt._y+2)*stage.h/210)/550*100}%`;
+  brand.style.width=`${56*stage.w/280/742*100}%`;
+  brand.style.height=`${14*stage.h/210/550*100}%`;
   canvas.addEventListener('pointermove',event=>{
     pointer(event);
     if(inStage() || event.buttons) root.onMouseMove.call(root);
@@ -72,6 +82,6 @@
   window.addEventListener('blur',release);
   document.fonts.ready.then(render);
   // Readable state and deterministic stepping for browser verification.
-  window.hamsterApp={root,step,render,stage,get paused(){return paused;},set paused(v){paused=v;}};
+  window.hamsterApp={root,step,render,stage,get paused(){return paused;},set paused(v){paused=Boolean(v);setManualClock(paused);}};
   step(); render(); requestAnimationFrame(animate);
 })();
